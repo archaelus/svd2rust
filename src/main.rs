@@ -10,6 +10,7 @@ extern crate inflections;
 extern crate quote;
 extern crate svd_parser as svd;
 extern crate syn;
+extern crate rustfmt;
 
 mod errors;
 mod generate;
@@ -35,6 +36,12 @@ fn run() -> Result<()> {
                 .takes_value(true)
                 .value_name("FILE"),
         )
+        .arg(
+            Arg::with_name("rustfmt")
+                .short("r")
+                .long("rustfmt")
+                .help("Pretty-print the output with rustfmt")
+        )
         .version(
             concat!(
                 env!("CARGO_PKG_VERSION"),
@@ -54,14 +61,35 @@ fn run() -> Result<()> {
     let mut items = vec![];
     generate::device(&device, &mut items)?;
 
-    println!(
-        "{}",
-        quote! {
-            #(#items)*
-        }
-    );
+    if matches.is_present("rustfmt") {
+        let text = format!("{}",
+                           quote! {
+                               #(#items)*
+                           });
+        
+        use rustfmt::config;
+        let config: config::Config =
+            config::Config { error_on_line_overflow: false,
+                             write_mode: config::WriteMode::Plain,
+                             ..Default::default() };
+        let result = rustfmt::run(rustfmt::Input::Text(text), &config);
 
-    Ok(())
+        if result.has_no_errors() {
+            Ok(())
+        } else {
+            println!("Rustfmt error: {:?}", result);
+            Err("rustfmt error!".into())
+        }
+    } else {
+        println!(
+            "{}",
+            quote! {
+                #(#items)*
+            }
+        );
+        Ok(())
+    }
+
 }
 
 fn main() {
